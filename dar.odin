@@ -21,29 +21,6 @@ import "vendor:zlib"
   ]...
 */
 
-// ErrorReason :: enum {
-// 	None = 0,
-// 	File_Exists,
-// 	File_Not_Found,
-// 	File_Create_Error,
-// 	File_Close_Error,
-// 	Missing_Signature,
-// 	ZLIB_ERROR,
-// }
-
-// ErrorError :: union {
-// 	os.Error,
-// 	os.Platform_Error,
-// 	varint.Error,
-// 	io.Error,
-// 	i32,
-// }
-
-// DAR_Error :: struct {
-// 	reason: ErrorReason,
-// 	err:    ErrorError,
-// }
-
 DAR_Error :: enum {
 	None = 0,
 	File_Exists,
@@ -65,24 +42,7 @@ Error :: union {
 	os.Error,
 }
 
-// Mode selects how to open or create a new DAR file
-Mode :: enum {
-	Open, // Open an existing dar file.
-	Create, // Create a new dar file, error if already exists.
-	Truncate, // Create a new dar file, overwriting if already exists.
-	Append, // Append to an existing dar file // TODO: use this to add files only, can be used to replace existing files but will not clean up existing file data
-}
-
-// Compression should only be 2 bits, ie: only 0-3
-Compression :: enum {
-	None = 0,
-	zlib,
-	reserved0,
-	reserved1,
-}
-
 DAR_FileEntry :: struct {
-	filename:  string,
 	offset:    u64, // offset in file to file entry header
 	comp_size: u64, // compressed file size
 	file_size: u64, // uncompressed file size
@@ -97,7 +57,6 @@ DAR_File :: struct {
 file_open :: proc(filename: string) -> (file: ^DAR_File, err: Error) {
 	if !os.exists(filename) {
 		return nil, DAR_Error.File_Not_Found
-		// return nil, DAR_Error{.File_Not_Found, nil}
 	}
 	f := os.open(filename) or_return
 	{ 	// check for signature
@@ -163,7 +122,6 @@ file_open :: proc(filename: string) -> (file: ^DAR_File, err: Error) {
 		}
 		offset := os.seek(dar.f, 0, os.SEEK_CUR) or_return
 		dar.files[fn] = DAR_FileEntry {
-			filename  = fn,
 			comp_size = u64(fdata_size),
 			file_size = u64(fdata_size + fdata_diff),
 			offset    = u64(offset),
@@ -189,7 +147,6 @@ file_create :: proc(filename: string, overwrite: bool = false) -> (file: ^DAR_Fi
 	f, oerr := os.open(filename, flags, 0o666)
 	if oerr != nil {
 		return nil, DAR_Error.File_Create_Error
-		// return nil, DAR_Error{.File_Create_Error, oerr}
 	}
 	// New file so write signature
 	sig := "DAR1"
@@ -210,18 +167,9 @@ file_close :: proc(f: ^DAR_File) -> Error {
 		free(f)
 	}
 
-	// keys := make([]string, len(f.files))
-	// defer delete(keys)
-	// i := 0
 	for k, _ in f.files {
-		// delete(f.files[k].filename)
-		// delete_key(&f.files, k)
-		// delete(k)
+		delete(k)
 	}
-
-	// for k in keys {
-	// 	delete(k)
-	// }
 
 	os.close(f.f) or_return
 	return nil
@@ -270,7 +218,8 @@ add_file :: proc(dar: ^DAR_File, filename: string, data: []byte) -> Error {
 	off := os.seek(dar.f, 0, os.SEEK_END) or_return
 	n = os.write(dar.f, buf.buf[:]) or_return
 	// add to the file list.
-	dar.files[filename] = DAR_FileEntry {
+	filename_clone := strings.clone(filename)
+	dar.files[filename_clone] = DAR_FileEntry {
 		offset    = u64(off),
 		comp_size = comp_len,
 		file_size = u64(len(data)),
